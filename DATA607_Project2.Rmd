@@ -1,0 +1,324 @@
+---
+title: "IS 607 Project 2"
+author: "Logan Thomson"
+date: "March 13, 2016"
+output: html_document
+---
+
+###Load Libraries  
+I used `dplyr` and `tidyr` since they are required for this assignment, and `ggplot2` to create a basic bar plot summarising the flight delay information.  
+
+```{r, message=FALSE}
+require(dplyr)
+require(tidyr)
+require(ggplot2)
+```
+
+##Basketball Wins  
+
+The first data set that I chose to tidy and analyze was the "Basketball Wins" data provided by Daniel Brooks. For all three data sets, I used either the supplied .csv, or copy/pasted the data into Excel and then saved as a .csv (I only used this method to save the file, all tidying was done in R). The file was then loaded into my GitHub repository, and I used the same method to load the data into R. 
+
+```{r}
+# open file
+path <- ("https://raw.githubusercontent.com/Logan213/DATA607_Project2/master/NBA_Wins.csv")
+con <- file(path, open="r")
+nba <- read.csv(con, header = TRUE, stringsAsFactors = FALSE)
+
+# close file
+close(con)
+
+head(nba[1:20], 10)
+```
+
+####Tidying Data
+
+The NBA Wins data contained rows that were basically a repeat of the header, as well as a "rank" column that was really just the ordering of the NBA/ABA seasons. I removed these with the `slice` and `select` functions, respectively.  
+
+There was also a "Total" row for each team; since I was going to use `dplyr` to calculate any totals, I removed any rows that contained this term. Lastly, I pivoted the data using the `gather` function to go from the wide format with the teams spread out, to a nice, tidy long format. Since I was going to be doing calculations on the number of wins, I converted this to numeric.
+
+```{r}
+# remove repeated header rows and "rank" column
+
+nba <- nba %>%
+  slice(c(-21, -42, -63)) %>%
+  select(Season:WAS) %>%
+  filter(Season != "Total") %>%
+  gather(Team, Wins, ATL:WAS) %>%
+  filter(Wins != "")
+
+nba$Wins <- as.numeric(nba$Wins)
+
+all_time <- arrange(nba, desc(Wins))
+
+head(nba, 10)
+```
+
+####Analysis  
+
+For the analysis of the NBA data, I used the "piping" to make the code more readable. I also found that using this method allows for quicker adjustments when tidying or arranging the data, as the rest of the code can be kept and one or two parameters can be changed.  
+
+####Cumulative wins over lifetime of NBA/BBA  
+
+Since we're mainly dealing with the teams, wins each season, and the season itself, it was fairly simple to group and summarise the data by Team and then Wins (respectively). 
+
+```{r}
+tot_wins <- nba %>%
+  group_by(Team) %>%
+  summarise(Total = sum(Wins)) %>%
+  arrange(desc(Total))
+```
+
+I then arranged by the total wins (a calculated column), just to show the teams who have won the most in NBA history are:
+
+```{r}
+head(tot_wins, 10)
+```
+
+####Average wins over lifetime of NBA/BBA  
+
+The list above is not an average, but just a running total. So, older teams have more wins than those who are more recent league expansion teams. Still, we can see a lot of familiar teams that have had consistent success over the years.  
+
+```{r}
+avg_wins <- nba %>%
+  group_by(Team) %>%
+  summarise(Avg_Wins = mean(Wins)) %>%
+  arrange(desc(Avg_Wins))
+```
+
+Just out of curiosity, I changed the summarise function to compute an average, so we can see the teams that average the most wins, regardless of how many seasons they have been in existence:  
+
+```{r}
+head(avg_wins, 10)
+```
+
+Looks like if the San Antonio Spurs were in existence a little longer, they would probably overtake the LA Lakers in total wins.  
+
+####Most wins in a season in franchise history  
+
+Again, I used the `group_by` function to group by team, and then simply selected the top number from the "Wins" column to get the highest number of wins by a team in a single season (not including post-season play):  
+
+```{r}
+team_max_wins <- nba %>%
+  group_by(Team) %>%
+  top_n(1, Wins)
+```
+
+Below is an alphabetical list of each NBA team, the highest number of wins acheived, and the season in which this feat was accomplished.  
+
+```{r}
+head(team_max_wins, 10)
+```
+
+####Most wins by team by year  
+
+```{r}
+wins_by_yr <- nba %>%
+  group_by(Season) %>%
+  top_n(1, Wins) %>%
+  distinct() %>%
+  arrange(desc(Season))
+```
+
+Below I have created a plot of the last 20 years winningest teams from the data, just to illustrate the "bar" for what most NBA teams shoot for each season (60 wins). Interestingly, many of the teams with the most wins, were also the team that won the championship that year - this does not always hold true in other major professional sports.  
+
+```{r}
+plot_wins <- tail(wins_by_yr, 20)
+
+# plot of each season's team with most wins
+ggplot(plot_wins, aes(plot_wins$Season, plot_wins$Wins)) + geom_bar(stat="identity") + geom_text(aes(label=plot_wins$Team), vjust=1.5, color="white") + labs(title = "Most Wins Each Season")
+```
+
+##Leading Causes of Death in NYC  
+
+The next data set I chose to tidy and analyze was the "Leading Causes of Death in NYC", provided by Armenoush Aslanian-persico.  
+
+```{r}
+# open file
+path1 <- ("https://raw.githubusercontent.com/Logan213/DATA607_Project2/master/New_York_City_Leading_Causes_of_Death.csv")
+con1 <- file(path1, open="r")
+nyc_deaths <- read.csv(con1, header = TRUE, stringsAsFactors = FALSE)
+
+# close file
+close(con1)
+
+head(nyc_deaths, 10)
+```
+
+###Analysis  
+
+Because the data were already provided in a fairly structured format, it did not require a lot of tidying in a sense of removing any rows, renaming headers, etc. I did notice there were some repeated rows, so I simply passed the `distinct` function while "piping" through my other functions.
+
+####Show leading causes of death each year for men and women  
+
+I sorted the data using `group_by`, and then found out about the `tally` function, which makes for a quick and easy way to sum up data for the column that is passed into the function. Any grouped data is maintained, so the combination of these two functions quickly gave me the total number for each cause of death. Using `top_n`, I selected the highest of each one of these vales, and then arranged the data from earliest year to most recent.  
+
+```{r}
+gender_cause <- nyc_deaths %>%
+  distinct %>%
+  group_by(Year, Sex, Cause.of.Death) %>%
+  tally(Count, sort=TRUE) %>%
+  top_n(1, n) %>%
+  arrange(Year)
+```
+
+For each year, Diseases of Heart is the clear winner, for both males and females:  
+
+```{r}
+gender_cause
+```
+  
+####Show leading causes of death each year for each ethnic group  
+
+Similar to the question above, I used a combination of `group_by`, `tally`, and `top_n` to arrange and sum the data to get the required answer. However, this time I used "Ethnicity" instead of gender so that I could filter by ethnic group.  
+
+```{r}
+ethnic_cause <- nyc_deaths %>%
+  distinct %>%
+  group_by(Year, Ethnicity, Cause.of.Death) %>%
+  tally(Count, sort=TRUE) %>%
+  top_n(1, n)
+```  
+
+Below we can see that, as expected, "Diseases of Heart" appears the most. The only other cause of death that comes up, oddly enough is "Malignant Neoplasms", both of which appeared for Asian and Pacific Islanders:  
+
+```{r}
+ethnic_cause
+```
+
+####Calculate which cause of death has declined the most and which has increased the most in years given.  
+
+```{r}
+cause_change <- nyc_deaths %>%
+  distinct %>%
+  filter(Year == 2007 | Year == 2011) %>%
+  group_by(Year, Cause.of.Death) %>%
+  tally(Count) %>%
+  spread(Year, n) %>%
+  mutate(Pct_Change= ((`2011` - `2007`) / `2007`) * 100)
+
+most <- arrange(cause_change, desc(Pct_Change))
+least <- arrange(cause_change, Pct_Change)
+```
+
+After filtering the data and creating the calculated column, the same object was used to create the `most` and `least` objects, each one basically showing the data sorted a different way.  
+
+There has been a large increase in both Alzheimers and Parkinson's diseases, this may be due to better dectection methods. Interestingly enough, the number one cause of death across all years (diseases of heart) is actually in the group with the largest decline. 
+
+```{r}
+# Increased the most
+head(most, 10)
+
+# Decreased the most
+head(least, 10)
+```
+
+####Calculate which cause of death has remained stable over the years given.  
+
+For this question, I again used the `cause_change` object that I created, and simply filtered out anything that was above or below the 10% change in rate from 2007 to 2011. Short of using more scientific methods to calculate stability, I took the causes of death whose numbers remained the same or close to it from 2007 to 2011. Note, this does not calculate a year-over-year average or similar measure.  
+
+What is probably most interesting about this data is that many of these causes can be attributed to human behavior (suicide, homicide, alcohol use). I guess humans are creatures of habit...  
+
+```{r}
+stable <- cause_change %>%
+  filter(Pct_Change >= -10 & Pct_Change <= 10) %>%
+  arrange(Pct_Change)
+
+stable
+
+```
+
+##Generator Capacity Prices  
+
+The last data set I chose was the "Generator Capacity Prices", provided by Daniel Smilowitz. Because of the double header rows, I actually read in the whole .csv and set the header parameter to `FALSE`, then captured the first two rows and pasted them together, renamed the first column header, and then used this to re-name the headers for the generator data. After doing this, re-arranging and tidying the data became much easier.  
+
+```{r}
+# open file
+path2 <- ("https://raw.githubusercontent.com/Logan213/DATA607_Project2/master/UCAP.csv")
+con2 <- file(path2, open="r")
+generate <- read.csv(con2, header = FALSE, stringsAsFactors = FALSE)
+
+# close file
+close(con2)
+
+row1 <- generate[1,]
+row2 <- generate[2,]
+gen_header <- paste(row1, row2, sep= " ")
+gen_header[1] <- "Date"
+
+generate <- slice(generate, c(-1,-2))
+names(generate) <- gen_header
+
+generate <- generate %>%
+  gather("Type", "Amount", 2:13) %>%
+  separate(Date, c("Month", "Year")) %>%
+  separate(Type, c("Auction", "Location"))
+
+generate$Amount <- as.numeric(sub("\\$","", generate$Amount))
+
+head(generate, 5)
+```
+
+###Analysis
+
+These questions were a little more difficult to arrange the data for in order to give an answer, but I believe I retrieved the necessary results.  
+
+####Which month of the year sees the highest prices in each location?  
+
+For this question, I used an average of all years provided. Using a combination for `group_by` and `summarise`, I was able to quickly filter and arrange the generator data to display the average price by month and location. Then, using `top_n`, I selcted the number one value (of price) by region.  
+
+```{r}
+high_price_mo <- generate %>%
+  filter(Amount != " ") %>%
+  group_by(Location, Month) %>%
+  summarise(avg = mean(Amount)) %>%
+  top_n(1, Month)
+```
+
+Below is the summarized data - looks like September is a very expensive month across the board for all regions.  Of course, the NYC region is the most expensive by far. 
+
+```{r}
+high_price_mo
+```
+
+####What is the avg. difference between NYC and ROS prices?  
+
+To find the average price difference between the NYC and "rest of state" regions, I first filtered the data to get rid of the null values, and then select only the regions relevant to the question. Using a combination of `group_by` and then `spread` functions, I arranged the data so that I could add a calculated column which showed the difference in price paid to generators for the two regions.  
+
+Using `tally`, I grouped and summed the months together, and then used `summarise` to come up with the average difference for each month.  
+
+```{r}
+nyc_vs_ros <- generate %>%
+  filter(Amount != " ") %>%
+  filter(Location == "NYC" | Location == "ROS") %>%
+  group_by(Month, Year) %>%
+  spread(Location, Amount) %>%
+  mutate(Price_diff = NYC - ROS) %>%
+  tally(Price_diff) %>%
+  summarise(Avg_dif = mean(n)) %>%
+  arrange(desc(Avg_dif))
+```
+
+We can see the results in the data below, surprisingly the coldest months of the year have the lowest differential in price.:  
+
+```{r}
+nyc_vs_ros
+```
+
+####Which calendar year saw the highest average price across regions (ignoring weighting)?  
+
+To find the answer to this question, I grouped the data by Year and Location, and then used summarise to "compress" each month of the year into an average price for that year. I then spread this data across four columns, and then used mutate to add a calculated column which sums the four regions and divides by 4 to get the average. I had to use this method as using `mean` again was causing some issues.  
+
+```{r}
+high_by_region <- generate %>%
+  filter(Amount != " ") %>%
+  group_by(Year, Location) %>%
+  summarise(Avg_Price = mean(Amount)) %>%
+  spread(Location, Avg_Price) %>%
+  mutate(ALL_Regions = (sum(LHV+LI+NYC+ROS) / 4))
+```
+
+Below we can see the average price paid to generators across each of the four regions, with the `All_Regions` column added. This column is an average of the four regions, and we can see that 2012 had the highest average price paid to generators.  
+
+```{r}
+high_by_region
+```
